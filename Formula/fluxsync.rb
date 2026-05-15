@@ -24,12 +24,36 @@ class Fluxsync < Formula
   head "https://github.com/flowerpower584/fluxsync.git", branch: "main"
 
   depends_on "rust" => :build
+  depends_on "node" => :build
+  depends_on :macos
 
   def install
     system "cargo", "install", *std_cargo_args(path: "crates/fluxsyncd")
     system "cargo", "install", *std_cargo_args(path: "crates/fluxctl")
 
+    cd "apps/macos-tray" do
+      system "npm", "install", "--no-audit", "--no-fund"
+      system "npx", "tauri", "build", "--bundles", "app"
+      app_src = "src-tauri/target/release/bundle/macos/FluxSync.app"
+      odie "Tauri build did not produce #{app_src}" unless File.exist?(app_src)
+      prefix.install app_src
+    end
+
     (var/"fluxsync").mkpath
+  end
+
+  def caveats
+    <<~EOS
+      The FluxSync menu-bar app was built locally (no Apple notarisation
+      required) and installed to:
+        #{opt_prefix}/FluxSync.app
+
+      Move it to /Applications (or symlink) to launch from Spotlight:
+        ln -sfn #{opt_prefix}/FluxSync.app /Applications/FluxSync.app
+
+      Or open it now:
+        open #{opt_prefix}/FluxSync.app
+    EOS
   end
 
   service do
@@ -44,5 +68,6 @@ class Fluxsync < Formula
   test do
     assert_match "fluxctl", shell_output("#{bin}/fluxctl --help")
     assert_match "fluxsyncd", shell_output("#{bin}/fluxsyncd --help")
+    assert_predicate prefix/"FluxSync.app/Contents/MacOS/fluxsync-macos-tray", :exist?
   end
 end
